@@ -45,6 +45,51 @@ const PERPLEXITY_ASK_TOOL: Tool = {
   },
 };
 
+/**
+ * Definition of the Perplexity Search Tool.
+ * This tool runs a web search and returns ranked results (title, URL, date,
+ * snippet) without a generated answer. Unlike perplexity_ask it works without
+ * paid credits.
+ */
+const PERPLEXITY_SEARCH_TOOL: Tool = {
+  name: "perplexity_search",
+  description:
+    "Searches the web live using the Perplexity Search API. " +
+    "Returns ranked results with title, URL, date and a content snippet, " +
+    "for you to read and summarize. Use it for current information.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "The search query",
+      },
+      max_results: {
+        type: "integer",
+        minimum: 1,
+        maximum: 20,
+        description: "Number of results to return (1-20, default 10)",
+      },
+      search_recency_filter: {
+        type: "string",
+        enum: ["hour", "day", "week", "month", "year"],
+        description: "Only return results published within this period",
+      },
+      search_domain_filter: {
+        type: "array",
+        items: { type: "string" },
+        maxItems: 20,
+        description: "Only return results from these domains (e.g. [\"nodejs.org\"])",
+      },
+      country: {
+        type: "string",
+        description: "Two-letter ISO 3166-1 country code to localize results (e.g. \"FI\")",
+      },
+    },
+    required: ["query"],
+  },
+};
+
 // Retrieve the Perplexity API key from environment variables
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 if (!PERPLEXITY_API_KEY) {
@@ -151,6 +196,69 @@ async function performChatCompletion(
   return messageContent;
 }
 
+/**
+ * Runs a web search via the Perplexity Search API and formats the ranked
+ * results as numbered text entries.
+ *
+ * @param {Record<string, unknown>} params - Search API request parameters (query plus optional filters).
+ * @returns {Promise<string>} The formatted search results.
+ * @throws Will throw an error if the API request fails.
+ */
+async function performSearch(params: Record<string, unknown>): Promise<string> {
+  // See https://docs.perplexity.ai/api-reference/search-post
+  const url = new URL("https://api.perplexity.ai/search");
+
+  let response;
+  try {
+    response = await fetch(url.toString(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${PERPLEXITY_API_KEY}`,
+      },
+      body: JSON.stringify(params),
+    });
+  } catch (error) {
+    throw new Error(`Network error while calling Perplexity API: ${error}`);
+  }
+
+  if (!response.ok) {
+    let errorText;
+    try {
+      errorText = await response.text();
+    } catch (parseError) {
+      errorText = "Unable to parse error response";
+    }
+    throw new Error(
+      `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`
+    );
+  }
+
+  let data;
+  try {
+    data = await response.json();
+  } catch (jsonError) {
+    throw new Error(`Failed to parse JSON response from Perplexity API: ${jsonError}`);
+  }
+
+  const results: any[] = Array.isArray(data.results) ? data.results : [];
+  if (results.length === 0) {
+    return "No results found.";
+  }
+
+  return results
+    .map((result, index) => {
+      const date = result.date ?? result.last_updated;
+      return (
+        `[${index + 1}] ${result.title}\n` +
+        `URL: ${result.url}\n` +
+        (date ? `Date: ${date}\n` : "") +
+        `${result.snippet ?? ""}`
+      );
+    })
+    .join("\n\n");
+}
+
 // Initialize the server with tool metadata and capabilities
 const server = new Server(
   {
@@ -169,7 +277,7 @@ const server = new Server(
  * When the client requests a list of tools, this handler returns the Perplexity Ask Tool.
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [PERPLEXITY_ASK_TOOL],
+  tools: [PERPLEXITY_ASK_TOOL, PERPLEXITY_SEARCH_TOOL],
 }));
 
 /**
@@ -193,6 +301,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Invoke the chat completion function with the provided messages
         const messages = args.messages;
         const result = await performChatCompletion(messages);
+        return {
+          content: [{ type: "text", text: result }],
+          isError: false,
+        };
+      }
+      case "perplexity_search": {
+        if (typeof args.query !== "string" || !args.query.trim()) {
+          throw new Error("Invalid arguments for perplexity-search: 'query' must be a non-empty string");
+        }
+        // Pass through only the parameters the tool exposes
+        const params: Record<string, unknown> = { query: args.query };
+        for (const key of ["max_results", "search_recency_filter", "search_domain_filter", "country"]) {
+          if (args[key] !== undefined) {
+            params[key] = args[key];
+          }
+        }
+        const result = await performSearch(params);
         return {
           content: [{ type: "text", text: result }],
           isError: false,

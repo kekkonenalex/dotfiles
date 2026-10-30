@@ -4,6 +4,13 @@ MCP server that lets Claude search the web live via Perplexity's Agent API
 (`/v1/agent`). Perplexity retired the Sonar chat-completions endpoint this was
 originally built on, so `index.ts` has been migrated; the Agent API needs paid
 credits on the Perplexity account.
+
+Tools:
+
+- `perplexity_ask`: Agent API, returns a written answer with citations. Needs
+  purchased credits (free or Pro-plan credit is refused with a 403).
+- `perplexity_search`: Search API, returns ranked results (title, URL, date,
+  snippet) for Claude to summarize. Works with free credit.
 Source: https://github.com/thangchung/ppl-ai-modelcontextprotocol (fork of
 https://github.com/perplexityai/modelcontextprotocol). Kept here so it can be
 pulled onto any machine via this dotfiles repo. Full upstream instructions in
