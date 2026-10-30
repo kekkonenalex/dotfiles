@@ -1,6 +1,9 @@
 # Perplexity Ask MCP Server
 
-MCP server that lets Claude search the web live via Perplexity's Sonar API.
+MCP server that lets Claude search the web live via Perplexity's Agent API
+(`/v1/agent`). Perplexity retired the Sonar chat-completions endpoint this was
+originally built on, so `index.ts` has been migrated; the Agent API needs paid
+credits on the Perplexity account.
 Source: https://github.com/thangchung/ppl-ai-modelcontextprotocol (fork of
 https://github.com/perplexityai/modelcontextprotocol). Kept here so it can be
 pulled onto any machine via this dotfiles repo. Full upstream instructions in

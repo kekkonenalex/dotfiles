@@ -16,7 +16,7 @@ import {
 const PERPLEXITY_ASK_TOOL: Tool = {
   name: "perplexity_ask",
   description:
-    "Engages in a conversation using the Sonar API. " +
+    "Engages in a conversation using the Perplexity Agent API with live web search. " +
     "Accepts an array of messages (each with a role and content) " +
     "and returns a ask completion response from the Perplexity model.",
   inputSchema: {
@@ -53,24 +53,31 @@ if (!PERPLEXITY_API_KEY) {
 }
 
 /**
- * Performs a chat completion by sending a request to the Perplexity API.
- * Appends citations to the returned message content if they exist.
+ * Performs a request to the Perplexity Agent API (the replacement for Sonar
+ * chat completions). Appends citations to the returned answer if they exist.
  *
  * @param {Array<{ role: string; content: string }>} messages - An array of message objects.
- * @returns {Promise<string>} The chat completion result with appended citations.
+ * @returns {Promise<string>} The answer text with appended citations.
  * @throws Will throw an error if the API request fails.
  */
 async function performChatCompletion(
   messages: Array<{ role: string; content: string }>
 ): Promise<string> {
-  // Construct the API endpoint URL and request body
-  const url = new URL("https://api.perplexity.ai/chat/completions");
+  // Construct the API endpoint URL and request body.
+  // System messages move to the top-level `instructions` field; the rest of the
+  // conversation goes into `input` as message items.
+  // See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/how-to
+  const url = new URL("https://api.perplexity.ai/v1/agent");
+  const instructions = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n\n");
   const body = {
-    model: "sonar-pro", // Model identifier; adjust as needed
-    messages: messages,
-    // Additional parameters can be added here if required (e.g., max_tokens, temperature, etc.)
-    // See the Sonar API documentation for more details: 
-    // https://docs.perplexity.ai/api-reference/chat-completions
+    effort: "fast", // Equivalent of the old "sonar-pro" model; web search is on by default
+    ...(instructions ? { instructions } : {}),
+    input: messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({ type: "message", role: m.role, content: m.content })),
   };
 
   let response;
@@ -108,14 +115,36 @@ async function performChatCompletion(
     throw new Error(`Failed to parse JSON response from Perplexity API: ${jsonError}`);
   }
 
-  // Directly retrieve the main message content from the response 
-  let messageContent = data.choices[0].message.content;
+  const output: any[] = Array.isArray(data.output) ? data.output : [];
 
-  // If citations are provided, append them to the message content
-  if (data.citations && Array.isArray(data.citations) && data.citations.length > 0) {
+  // Prefer the convenience `output_text` field; otherwise collect the text parts
+  // of every message item in `output`
+  let messageContent: string =
+    typeof data.output_text === "string" && data.output_text
+      ? data.output_text
+      : output
+          .filter((item) => item.type === "message" && Array.isArray(item.content))
+          .flatMap((item) => item.content)
+          .filter((part: any) => part.type === "output_text" && typeof part.text === "string")
+          .map((part: any) => part.text)
+          .join("");
+
+  if (!messageContent) {
+    throw new Error(
+      `Perplexity API returned no answer text (status: ${data.status ?? "unknown"})`
+    );
+  }
+
+  // Sources come back in `search_results` items; inline [n] markers in the
+  // answer refer to the result whose `id` is n
+  const sources = output
+    .filter((item) => item.type === "search_results" && Array.isArray(item.results))
+    .flatMap((item) => item.results)
+    .filter((result: any) => result.url);
+  if (sources.length > 0) {
     messageContent += "\n\nCitations:\n";
-    data.citations.forEach((citation: string, index: number) => {
-      messageContent += `[${index + 1}] ${citation}\n`;
+    sources.forEach((result: any, index: number) => {
+      messageContent += `[${result.id ?? index + 1}] ${result.url}\n`;
     });
   }
 
