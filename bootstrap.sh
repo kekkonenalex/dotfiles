@@ -24,3 +24,19 @@ for src in "$skills_src_dir"/*/; do
     ln -s "${src%/}" "$link"
     echo "linked $name"
 done
+
+# Make ~/.claude/CLAUDE.md import the shared claude/CLAUDE.md (same layout as on Windows,
+# so the device file can also hold private, machine-only notes).
+import_line="@~/dotfiles/claude/CLAUDE.md"
+device_file="$HOME/.claude/CLAUDE.md"
+
+if [ ! -e "$device_file" ]; then
+    printf '%s\n\n# This device (private, not synced)\n\n- Describe this device here: personal or work laptop, OS, anything Claude should know only on this machine.\n' "$import_line" > "$device_file"
+    echo "created $device_file (importing the shared CLAUDE.md)"
+elif grep -qF "$import_line" "$device_file"; then
+    echo "OK (already imports the shared CLAUDE.md): $device_file"
+else
+    cp "$device_file" "$device_file.prev"
+    { printf '%s\n\n' "$import_line"; cat "$device_file.prev"; } > "$device_file"
+    echo "added the import to the top of $device_file (old version saved as CLAUDE.md.prev)"
+fi
