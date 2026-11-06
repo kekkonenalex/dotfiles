@@ -17,9 +17,10 @@ dotfiles/
     CLAUDE.md            # shared instructions, imported by ~/.claude/CLAUDE.md on every machine
     chat-preferences.md  # short version to paste into the Claude apps' chat settings
     skills/              # each subfolder is a skill (a SKILL.md file)
+    plugins.txt          # Claude Code plugins (and their marketplaces) to install on every machine
   mcp-servers/
     perplexity-ask/      # MCP server: live web search for Claude via Perplexity
-  bootstrap.ps1          # Windows: link skills into ~/.claude/skills, set up ~/.claude/CLAUDE.md
+  bootstrap.ps1          # Windows: link skills, set up ~/.claude/CLAUDE.md, install plugins
   bootstrap.sh           # macOS/Linux: the same with symlinks
 ```
 
@@ -39,8 +40,12 @@ in the dotfiles repo (and running `git pull`) updates it everywhere without rein
 On Windows the link is a directory **junction** (`New-Item -ItemType Junction`), which doesn't
 require admin rights or Developer Mode, unlike a symlink. On macOS/Linux it's a normal symlink.
 
-The scripts are idempotent: links that already exist are skipped, and folders that aren't
-links created by the script are never overwritten.
+The scripts also install every plugin listed in `claude/plugins.txt` through the `claude` CLI
+(`claude plugin marketplace add` and `claude plugin install`, user scope). To add a plugin
+everywhere, add a line there and re-run the bootstrap on each machine.
+
+The scripts are idempotent: links that already exist are skipped, folders that aren't
+links created by the script are never overwritten, and installed plugins are left as they are.
 
 ## CLAUDE.md
 

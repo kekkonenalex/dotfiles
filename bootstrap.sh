@@ -40,3 +40,22 @@ else
     { printf '%s\n\n' "$import_line"; cat "$device_file.prev"; } > "$device_file"
     echo "added the import to the top of $device_file (old version saved as CLAUDE.md.prev)"
 fi
+
+# Install the Claude Code plugins listed in claude/plugins.txt. Both commands are no-ops when
+# the marketplace or plugin is already there, so re-running the bootstrap is safe.
+if ! command -v claude >/dev/null 2>&1; then
+    echo "SKIP plugins: the claude CLI isn't on PATH. Install Claude Code, then re-run this script."
+else
+    while read -r plugin source _; do
+        case "$plugin" in ''|'#'*) continue ;; esac
+        if [ -n "${source:-}" ] && ! claude plugin marketplace add "$source" </dev/null >/dev/null; then
+            echo "FAILED to add marketplace $source"
+            continue
+        fi
+        if claude plugin install "$plugin" </dev/null >/dev/null; then
+            echo "plugin ready: $plugin"
+        else
+            echo "FAILED to install plugin $plugin"
+        fi
+    done < "$dotfiles/claude/plugins.txt"
+fi

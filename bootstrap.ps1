@@ -42,3 +42,23 @@ if (-not (Test-Path $deviceFile)) {
     [System.IO.File]::WriteAllText($deviceFile, "$importLine`n`n$existing", $utf8NoBom)
     Write-Output "added the import to the top of $deviceFile (old version saved as CLAUDE.md.prev)"
 }
+
+# Install the Claude Code plugins listed in claude/plugins.txt. Both commands are no-ops when
+# the marketplace or plugin is already there, so re-running the bootstrap is safe.
+$pluginList = Join-Path $dotfiles "claude\plugins.txt"
+if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+    Write-Output "SKIP plugins: the claude CLI isn't on PATH. Install Claude Code, then re-run this script."
+} else {
+    Get-Content $pluginList | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -eq "" -or $line.StartsWith("#")) { return }
+        $parts = $line -split "\s+"
+        $plugin = $parts[0]
+        if ($parts.Count -gt 1) {
+            claude plugin marketplace add $parts[1] | Out-Null
+            if ($LASTEXITCODE -ne 0) { Write-Output "FAILED to add marketplace $($parts[1])"; return }
+        }
+        claude plugin install $plugin | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-Output "plugin ready: $plugin" } else { Write-Output "FAILED to install plugin $plugin" }
+    }
+}

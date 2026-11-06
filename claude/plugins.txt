@@ -1,0 +1,7 @@
+# Claude Code plugins installed on every machine by the bootstrap scripts.
+# One per line: <plugin>@<marketplace> [<marketplace source>]
+# The source (a GitHub owner/repo) is only needed for marketplaces Claude Code doesn't know yet;
+# claude-plugins-official is built in. Lines starting with # are ignored.
+
+floorplan@floorplan haydenschmitty/floorplan
+frontend-design@claude-plugins-official
